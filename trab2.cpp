@@ -1,6 +1,7 @@
 #include <vector>
 #include <cstdio>
 #include "gurobi_c++.h"
+#include "stdlib.h"
 #include <sstream>
 
 #define NIL 0
@@ -30,12 +31,12 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
 		incidencia[j][passages[j][1]] = -1;
 	}
 
-
+    cout << "Processada a entrada\n";
 	try 
     {
 		// Set gurobi environment
 		GRBEnv env = GRBEnv(true); // creates empty environment
-		env.set(GRB_IntParam_OutputFlag, 0); // comment this line to show optimization data in the std output
+		//env.set(GRB_IntParam_OutputFlag, 0); // comment this line to show optimization data in the std output
 		env.start();
 
 		// Write your model here //
@@ -44,7 +45,7 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
         model.set(GRB_StringAttr_ModelName, "Prize Hunt");
 
         x = model.addVars(n + 1, GRB_BINARY);
-        model.update();
+        //model.update();
 
         for(int i = 0; i <= n; i++){
             ostringstream vname;
@@ -53,16 +54,12 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
             x[i].set(GRB_StringAttr_VarName, vname.str());
         }
 
-        GRBLinExpr function = 0;
-
-        for (int i = 0; i <= n; i++){
-            function += x[i] * prizes[i];
-        }
+        cout << "Defini o x\n";
 
         y = new GRBVar* [m + n -1];
         for (int j = 0; j < m + n - 1; j ++){
             y[j] = model.addVars(k, GRB_BINARY);
-            model.update();
+            //model.update();
             for (int d = 0; d < k; d++){
                 ostringstream vname;
                 vname << "y" << j << d;
@@ -71,15 +68,21 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
             }
         }
 
+        cout << "Defini o y\n";
+
+        GRBLinExpr function = 0;
+
+        for (int i = 0; i <= n; i++){
+            function += x[i] * prizes[i];
+        }
         for (int j = 0; j < m+n - 1; j++){
             for (int d = 0; d < k; d++){
                 function = function - y[j][d] * passages[j][2];
             }
         }
-
+        cout << "Defini a funcao\n";
         model.setObjective(function, GRB_MAXIMIZE);
-        model.update();
-
+    
         // Restricoes
         //restricao 1: Para todo j somatorio em k de yjk <= 1
         for (int j = 0; j < m + n - 1; j++){
@@ -90,12 +93,16 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
             model.addConstr(lim_aresta <= 1, "Passagem única por aresta");
         }
 
+        cout << "Defini a restricao 1\n";
+
         //restricao 2: somatorio em x de 1 ate n tem que ser maior que P
         GRBLinExpr min_prem = 0;
         for (int i = 1; i <= n; i++){
             min_prem += x[i];
         }
         model.addConstr(min_prem >= P, "Numero minimo de premios coletados");
+
+        cout << "Defini a restricao 2\n";
 
         //restricao 3: 
         //Para todo vertice i de 1 ate n com i diferente de t, soma-se o valor de cada aresta j que eh
@@ -108,9 +115,10 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
                         grau_zero += incidencia[j][i] * y[j][d];
                     }
                 }
-                model.addConstr(grau_zero == 0, "Grau de entrada confirmada igual ao de saida");
+                model.addConstr(grau_zero == 0, "Grau de entrada confirmada igual ao de saida confirmada");
             }
         }
+        cout << "Defini a restricao 3\n";
 
         //restricao 4:
         //Para cada caçador, ele deve sair de uma e apenas uma aresta do vertice inicial
@@ -121,9 +129,10 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
             }
             model.addConstr(saida_unica == 1, "Caçador sai por apenas uma aresta do vertice inicial");
         }
+        cout << "Defini a restricao 4\n";
 
         //restricao 5:
-        //Para cada caçador, ele deve entrar por apenas uma aresta do vértice de chegada
+        //Para cada caçador, ele deve entrar por apenas uma aresta do vértice target
         for (int d = 0; d < k; d++){
             GRBLinExpr entrada_unica = 0;
             for (int j = 0; j < n + m -1; j ++){
@@ -132,7 +141,32 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
             model.addConstr(entrada_unica == -1, "Caçador sai por apenas uma aresta do vertice inicial");
         }
 
-        model.update();
+        cout << "Defini a restricao 5\n";
+
+        //restricao 6:
+        //Garantir que o vértice soh eh percorrido se existem arestas que passam por ele
+        for (int i = 0; i <= n; i++){
+            GRBLinExpr pode_pegar = 0;
+            for (int j = 0; j < n+m-1; j++){
+                for (int d = 0; d < k; d++){
+                    pode_pegar += y[j][d] * abs(incidencia[j][i]);
+                }
+            }
+            model.addConstr(pode_pegar >= x[i], "Verifica se o vértice pode ser pego ou não");
+        }
+
+        cout << "Defini a restricao 6\n";
+
+        //model.update();
+        // Use barrier to solve root relaxation
+        model.set(GRB_IntParam_Method, GRB_METHOD_BARRIER);
+        //model.update();
+        model.optimize();
+        cout << "Otimizei\n";
+        for (int i = 0; i <= n; i++){
+            cout << x[i].get(GRB_DoubleAttr_X) << " ";
+        }
+        cout << "\n";
         result = model.get(GRB_DoubleAttr_ObjVal);
 	}
 	catch (GRBException e)
