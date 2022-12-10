@@ -56,16 +56,12 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
 
         //cout << "Defini o x\n";
 
-        y = new GRBVar* [m + n -1];
+        y[j] = model.addVars(m+n-1, GRB_BINARY);
         for (int j = 0; j < m + n - 1; j ++){
-            y[j] = model.addVars(k, GRB_BINARY);
-            //model.update();
-            for (int d = 0; d < k; d++){
-                ostringstream vname;
-                vname << "y" << j << d;
-                y[j][d].set(GRB_DoubleAttr_Obj, 0);
-                y[j][d].set(GRB_StringAttr_VarName, vname.str());
-            }
+            ostringstream vname;
+            vname << "y" << j
+            y[j].set(GRB_DoubleAttr_Obj, 0);
+            y[j].set(GRB_StringAttr_VarName, vname.str());
         }
 
         //cout << "Defini o y\n";
@@ -76,20 +72,17 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
             function += x[i] * prizes[i];
         }
         for (int j = 0; j < m+n - 1; j++){
-            for (int d = 0; d < k; d++){
-                function = function - y[j][d] * passages[j][2];
-            }
+            function = function - y[j] * passages[j][2];
         }
         //cout << "Defini a funcao\n";
         model.setObjective(function, GRB_MAXIMIZE);
     
         // Restricoes
-        //restricao 1: Para todo j somatorio em k de yjk <= 1
+
+        //restricao 1: Para toda aresta, numero de passagens pode ser no maximo 1
         for (int j = 0; j < m + n - 1; j++){
             GRBLinExpr lim_aresta = 0;
-            for (int d = 0; d < k; d++){
-                lim_aresta += y[j][d];
-            }
+            lim_aresta += y[j];
             model.addConstr(lim_aresta <= 1, "Passagem única por aresta");
         }
 
@@ -105,34 +98,28 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
         //cout << "Defini a restricao 2\n";
 
         //restricao 3: 
-        //Para todo vertice i de 1 ate n com i diferente de t, para todo cacador, o fluxo tem q ser 0
+        //Para todo vertice i de 1 ate n com i diferente de t, o fluxo tem q ser 0
         for (int i = 1; i <= n; i++){
             if (i != target){
-                // para todo vertice vertice
-                for (int d = 0; d < k; d++){
-                    //para todo caçador
-                    GRBLinExpr grau_zero = 0;
-                    for (int j = 0; j < m+n-1; j++){
-                        grau_zero += incidencia[j][i] * y[j][d];
-                    }
-                    model.addConstr(grau_zero == 0, "Grau de entrada confirmada igual ao de saida confirmada");
+            // para todo vertice i
+                GRBLinExpr grau_zero = 0;
+                for (int j = 0; j < m+n-1; j++){
+                    grau_zero += incidencia[j][i] * y[j];
                 }
+                model.addConstr(grau_zero == 0, "Grau de entrada confirmada igual ao de saida confirmada");
             }
         }
         //cout << "Defini a restricao 3\n";
 
         //restricao 4:
-        //Para cada caçador, ele deve sair de uma e apenas uma aresta do vertice inicial
-        for (int d = 0; d < k; d++){
-            GRBLinExpr saida_unica = 0;
-            GRBLinExpr entrada_unica = 0;
-            for (int j = 0; j < n + m -1; j ++){
-                saida_unica += incidencia[j][0] * y[j][d];
-                entrada_unica += incidencia[j][target] * y[j][d];
-            }
-            model.addConstr(saida_unica == 1, "Caçador sai por apenas uma aresta do vertice inicial");
-            model.addConstr(entrada_unica == -1, "Caçador sai por apenas uma aresta do vertice inicial");
+        GRBLinExpr saida_cacadores = 0;
+        GRBLinExpr entrada_unica = 0;
+        for (int j = 0; j < n + m -1; j ++){
+            saida_cacadores += incidencia[j][0] * y[j];
+            entrada_cacadores += incidencia[j][target] * y[j];
         }
+        model.addConstr(saida_cacadores == k, "k arestas utilizadas do vertice inicial");
+        model.addConstr(entrada_cacadores == -k, "k arestas utilizadas do vertice target");
         //cout << "Defini a restricao 4\n";
 
         //restricao 5:
@@ -140,9 +127,7 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
         for (int i = 0; i <= n; i++){
             GRBLinExpr pode_pegar = 0;
             for (int j = 0; j < n+m-1; j++){
-                for (int d = 0; d < k; d++){
-                    pode_pegar += y[j][d] * abs(incidencia[j][i]);
-                }
+                pode_pegar += y[j] * abs(incidencia[j][i]);
             }
             model.addConstr(pode_pegar >= x[i], "Verifica se o vértice pode ser pego ou não");
         }
