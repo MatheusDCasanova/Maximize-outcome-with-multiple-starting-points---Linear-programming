@@ -41,7 +41,6 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
 
         GRBModel model = GRBModel(env);
         model.set(GRB_StringAttr_ModelName, "Prize Hunt");
-        model.set(GRB_DoubleParam_TimeLimit, 5);
 
         x = model.addVars(n + 1, GRB_BINARY);
         //model.update();
@@ -72,7 +71,6 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
         model.setObjective(function, GRB_MAXIMIZE);
     
         // Restricoes
-
         GRBLinExpr min_prem = 0;
         for (int i = 1; i <= n; i++){
             if (prizes[i] > 0){
@@ -94,18 +92,21 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
         model.addConstr(saida_cacadores == k, "k arestas utilizadas do vertice inicial");
         model.addConstr(entrada_cacadores == -k, "k arestas utilizadas do vertice target");
 
-        cout << "antes da restr" << endl;
+
         for (int i = 1; i <= n; i++){
             GRBLinExpr limite = 0;
             for (int j = 0; j < n+m-1; j++){
                 if (incidencia[j][i] < 0){
                     limite += y[j]; 
-                } 
+                }
             }
             model.addConstr(limite >= x[i], "Verifica se o vértice pode ser pego ou não");
+        }
+
+        cout << "Vertice pode ser pego ou nao decidido" << endl;
+        for (int i = 1; i <= n; i++){
+            GRBLinExpr limite = 0;
             if (i != target){
-                limite = 0;
-                // para todo vertice i
                 for (int j = 0; j < m+n-1; j++){
                     if (incidencia[j][i] == 1){
                         limite += y[j];
@@ -117,7 +118,7 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
             }
         }
 
-        cout << "dps da restr" << endl;
+        cout << "fluxo 0" << endl;
 
         //model.update();
         // Use barrier to solve root relaxation
