@@ -42,16 +42,16 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
         GRBModel model = GRBModel(env);
         model.set(GRB_StringAttr_ModelName, "Prize Hunt");
 
+        //Inicialização da variável binária de decisão x
         x = model.addVars(n + 1, GRB_BINARY);
-        //model.update();
-
         for(int i = 0; i <= n; i++){
             ostringstream vname;
             vname << "x" << i;
             x[i].set(GRB_DoubleAttr_Obj, 0);
             x[i].set(GRB_StringAttr_VarName, vname.str());
         }
-
+        
+        //Inicialização da variável binária de decisão y
         y = model.addVars(m+n-1, GRB_BINARY);
         for (int j = 0; j < m + n - 1; j ++){
             ostringstream vname;
@@ -60,8 +60,8 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
             y[j].set(GRB_StringAttr_VarName, vname.str());
         }
 
+        //Definição da função objetivo a ser maximizada
         GRBLinExpr function = 0;
-
         for (int i = 0; i <= n; i++){
             function += x[i] * prizes[i];
         }
@@ -70,7 +70,10 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
         }
         model.setObjective(function, GRB_MAXIMIZE);
     
-        // Restricoes
+
+        // RESTRIÇÕES
+
+        //Restrição equação 2 relatório
         GRBLinExpr min_prem = 0;
         for (int i = 1; i <= n; i++){
             if (prizes[i] > 0){
@@ -79,6 +82,8 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
         }
         model.addConstr(min_prem >= P, "Numero minimo de premios coletados");
 
+
+        //Restrição equação 3 relatório
         GRBLinExpr saida_cacadores = 0;
         GRBLinExpr entrada_cacadores = 0;
         for (int j = 0; j < n + m -1; j ++){
@@ -92,7 +97,7 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
         model.addConstr(saida_cacadores == k, "k arestas utilizadas do vertice inicial");
         model.addConstr(entrada_cacadores == -k, "k arestas utilizadas do vertice target");
 
-
+        //Restrição equação 4 relatório
         for (int i = 1; i <= n; i++){
             GRBLinExpr limite = 0;
             for (int j = 0; j < n+m-1; j++){
@@ -103,7 +108,7 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
             model.addConstr(limite >= x[i], "Verifica se o vértice pode ser pego ou não");
         }
 
-        cout << "Vertice pode ser pego ou nao decidido" << endl;
+        //Restrição equação 5 relatório
         for (int i = 1; i <= n; i++){
             GRBLinExpr limite = 0;
             if (i != target){
@@ -118,14 +123,9 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
             }
         }
 
-        cout << "fluxo 0" << endl;
-
-        //model.update();
         // Use barrier to solve root relaxation
         model.set(GRB_IntParam_Method, GRB_METHOD_BARRIER);
-        //model.update();
         model.optimize();
-        //cout << "Otimizei\n";
         result = model.get(GRB_DoubleAttr_ObjVal);
 	}
 	catch (GRBException e)
