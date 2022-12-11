@@ -1,7 +1,6 @@
 #include <vector>
 #include <cstdio>
 #include "gurobi_c++.h"
-#include "stdlib.h"
 #include <sstream>
 
 #define NIL 0
@@ -12,7 +11,7 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
 {
 	int result = NIL;
     GRBVar* x = 0;
-    GRBVar** y = 0;
+    GRBVar* y = 0;
     prizes.insert(prizes.begin(), 0);
 
     for (int i = 1; i <= n; i++){
@@ -31,7 +30,6 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
 		incidencia[j][passages[j][1]] = -1;
 	}
 
-    //cout << "Processada a entrada\n";
 	try 
     {
 		// Set gurobi environment
@@ -43,6 +41,7 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
 
         GRBModel model = GRBModel(env);
         model.set(GRB_StringAttr_ModelName, "Prize Hunt");
+        model.set(GRB_DoubleParam_TimeLimit, 5);
 
         x = model.addVars(n + 1, GRB_BINARY);
         //model.update();
@@ -54,17 +53,13 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
             x[i].set(GRB_StringAttr_VarName, vname.str());
         }
 
-        //cout << "Defini o x\n";
-
-        y[j] = model.addVars(m+n-1, GRB_BINARY);
+        y = model.addVars(m+n-1, GRB_BINARY);
         for (int j = 0; j < m + n - 1; j ++){
             ostringstream vname;
-            vname << "y" << j
+            vname << "y" << j;
             y[j].set(GRB_DoubleAttr_Obj, 0);
             y[j].set(GRB_StringAttr_VarName, vname.str());
         }
-
-        //cout << "Defini o y\n";
 
         GRBLinExpr function = 0;
 
@@ -72,67 +67,54 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
             function += x[i] * prizes[i];
         }
         for (int j = 0; j < m+n - 1; j++){
-            function = function - y[j] * passages[j][2];
+            function -= y[j] * passages[j][2];
         }
-        //cout << "Defini a funcao\n";
         model.setObjective(function, GRB_MAXIMIZE);
     
         // Restricoes
 
-        //restricao 1: Para toda aresta, numero de passagens pode ser no maximo 1
-        for (int j = 0; j < m + n - 1; j++){
-            GRBLinExpr lim_aresta = 0;
-            lim_aresta += y[j];
-            model.addConstr(lim_aresta <= 1, "Passagem única por aresta");
-        }
-
-        //cout << "Defini a restricao 1\n";
-
-        //restricao 2: somatorio em x de 1 ate n tem que ser maior que P
         GRBLinExpr min_prem = 0;
         for (int i = 1; i <= n; i++){
-            min_prem += x[i];
+            if (prizes[i] > 0){
+                min_prem += x[i];
+            }
         }
         model.addConstr(min_prem >= P, "Numero minimo de premios coletados");
 
-        //cout << "Defini a restricao 2\n";
+        GRBLinExpr saida_cacadores = 0;
+        GRBLinExpr entrada_cacadores = 0;
+        for (int j = 0; j < n + m -1; j ++){
+            if (incidencia[j][0] == 1){
+                saida_cacadores += y[j];
+            }
+            if (incidencia[j][target] == -1){
+                entrada_cacadores -= y[j];
+            }
+        }
+        model.addConstr(saida_cacadores == k, "k arestas utilizadas do vertice inicial");
+        model.addConstr(entrada_cacadores == -k, "k arestas utilizadas do vertice target");
 
-        //restricao 3: 
-        //Para todo vertice i de 1 ate n com i diferente de t, o fluxo tem q ser 0
         for (int i = 1; i <= n; i++){
+            GRBLinExpr pode_pegar = 0;
+            for (int j = 0; j < n+m-1; j++){
+                if (incidencia[j][i] < 0){
+                    pode_pegar += y[j]; 
+                } 
+            }
+            model.addConstr(pode_pegar >= x[i], "Verifica se o vértice pode ser pego ou não");
             if (i != target){
             // para todo vertice i
                 GRBLinExpr grau_zero = 0;
                 for (int j = 0; j < m+n-1; j++){
-                    grau_zero += incidencia[j][i] * y[j];
+                    if (incidencia[j][i] == 1){
+                        grau_zero += y[j];
+                    } else if(incidencia[j][i] == -1){
+                        grau_zero -= y[j];
+                    }
                 }
                 model.addConstr(grau_zero == 0, "Grau de entrada confirmada igual ao de saida confirmada");
             }
         }
-        //cout << "Defini a restricao 3\n";
-
-        //restricao 4:
-        GRBLinExpr saida_cacadores = 0;
-        GRBLinExpr entrada_unica = 0;
-        for (int j = 0; j < n + m -1; j ++){
-            saida_cacadores += incidencia[j][0] * y[j];
-            entrada_cacadores += incidencia[j][target] * y[j];
-        }
-        model.addConstr(saida_cacadores == k, "k arestas utilizadas do vertice inicial");
-        model.addConstr(entrada_cacadores == -k, "k arestas utilizadas do vertice target");
-        //cout << "Defini a restricao 4\n";
-
-        //restricao 5:
-        //Garantir que o vértice soh eh percorrido se existem arestas que passam por ele
-        for (int i = 0; i <= n; i++){
-            GRBLinExpr pode_pegar = 0;
-            for (int j = 0; j < n+m-1; j++){
-                pode_pegar += y[j] * abs(incidencia[j][i]);
-            }
-            model.addConstr(pode_pegar >= x[i], "Verifica se o vértice pode ser pego ou não");
-        }
-
-        //cout << "Defini a restricao 5\n";
 
         //model.update();
         // Use barrier to solve root relaxation
@@ -153,9 +135,6 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
 	}
 
     delete[] x;
-    for (int j = 0; j < m+n - 1; j++){
-        delete[] y[j];
-    }
 
     delete[] y;
 
