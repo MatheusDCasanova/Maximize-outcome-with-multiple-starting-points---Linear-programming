@@ -19,7 +19,7 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
             vector<int> nova_aresta(3, 0);
             nova_aresta[0] = 0;
             nova_aresta[1] = i;
-            passages.insert(passages.begin(), nova_aresta);
+            passages.push_back(nova_aresta);
         }
     }
 
@@ -94,27 +94,30 @@ int prizedKpaths(int n, int m, vector<vector<int>> &passages, vector<int> &prize
         model.addConstr(saida_cacadores == k, "k arestas utilizadas do vertice inicial");
         model.addConstr(entrada_cacadores == -k, "k arestas utilizadas do vertice target");
 
+        cout << "antes da restr" << endl;
         for (int i = 1; i <= n; i++){
-            GRBLinExpr pode_pegar = 0;
+            GRBLinExpr limite = 0;
             for (int j = 0; j < n+m-1; j++){
                 if (incidencia[j][i] < 0){
-                    pode_pegar += y[j]; 
+                    limite += y[j]; 
                 } 
             }
-            model.addConstr(pode_pegar >= x[i], "Verifica se o vértice pode ser pego ou não");
+            model.addConstr(limite >= x[i], "Verifica se o vértice pode ser pego ou não");
             if (i != target){
-            // para todo vertice i
-                GRBLinExpr grau_zero = 0;
+                limite = 0;
+                // para todo vertice i
                 for (int j = 0; j < m+n-1; j++){
                     if (incidencia[j][i] == 1){
-                        grau_zero += y[j];
+                        limite += y[j];
                     } else if(incidencia[j][i] == -1){
-                        grau_zero -= y[j];
+                        limite -= y[j];
                     }
                 }
-                model.addConstr(grau_zero == 0, "Grau de entrada confirmada igual ao de saida confirmada");
+                model.addConstr(limite == 0, "Grau de entrada confirmada igual ao de saida confirmada");
             }
         }
+
+        cout << "dps da restr" << endl;
 
         //model.update();
         // Use barrier to solve root relaxation
